@@ -2,19 +2,17 @@ import streamlit as st
 import json
 import os
 
-# 数据文件路径
+# 数据文件
 DATA_FILE = "dishes.json"
+
+# 初始化购物车
+if "cart" not in st.session_state:
+    st.session_state.cart = []
 
 # 读取菜品
 def load_dishes():
     if not os.path.exists(DATA_FILE):
-        init_data = [
-            {"id": 1, "name": "宫保鸡丁", "price": 28.0, "remark": "经典川菜"},
-            {"id": 2, "name": "番茄炒蛋", "price": 16.0, "remark": "家常下饭菜"},
-            {"id": 3, "name": "红烧肉", "price": 36.0, "remark": "肥而不腻"}
-        ]
-        save_dishes(init_data)
-        return init_data
+        return []
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -23,31 +21,59 @@ def save_dishes(dish_list):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(dish_list, f, ensure_ascii=False, indent=2)
 
-# ---------------------- 侧边栏导航 ----------------------
+# 侧边栏导航
 st.sidebar.title("📋 点餐系统")
 page = st.sidebar.radio("功能页面", ["顾客点餐", "菜品管理(增删改)"])
 
 dishes = load_dishes()
 
-# ====================== 页面1：顾客点餐 ======================
+# ====================== 顾客点餐（可点餐+自动算价格） ======================
 if page == "顾客点餐":
-    st.title("🍽️ 在线点餐")
+    st.title("🍽️ 在线点餐 & 价格结算")
     st.divider()
 
     if not dishes:
         st.info("暂无菜品，请先到菜品管理添加")
     else:
+        # 遍历菜品点餐
         for item in dishes:
             st.subheader(f"{item['name']}  ￥{item['price']}")
-            st.text(f"备注：{item['remark']}")
+            st.text(f"简介：{item['remark']}")
+            qty = st.number_input(f"购买数量 - {item['name']}", min_value=1, value=1, step=1, key=f"qty_{item['id']}")
+            
+            if st.button(f"加入购物车", key=f"add_{item['id']}"):
+                # 加入购物车
+                st.session_state.cart.append({
+                    "name": item["name"],
+                    "price": item["price"],
+                    "qty": qty,
+                    "subtotal": item["price"] * qty
+                })
+                st.success(f"已加入 {item['name']} ×{qty}")
             st.divider()
 
-# ====================== 页面2：菜品管理 增删改 ======================
+    # 购物车 & 价格计算
+    st.sidebar.header("🛒 购物车")
+    if st.session_state.cart:
+        total_all = 0
+        for goods in st.session_state.cart:
+            st.sidebar.write(f"{goods['name']} ×{goods['qty']}  = ￥{goods['subtotal']:.2f}")
+            total_all += goods['subtotal']
+        st.sidebar.markdown("---")
+        st.sidebar.subheader(f"💰 订单总价：￥{total_all:.2f}")
+
+        if st.sidebar.button("清空购物车"):
+            st.session_state.cart = []
+            st.rerun()
+    else:
+        st.sidebar.info("购物车暂无商品")
+
+# ====================== 菜品管理：新增、修改、删除 ======================
 elif page == "菜品管理(增删改)":
     st.title("🔧 菜品管理中心")
     st.divider()
 
-    # 1. 新增菜品
+    # 新增菜品
     st.subheader("➕ 添加新菜品")
     with st.form("add_form"):
         new_name = st.text_input("菜品名称")
@@ -59,7 +85,6 @@ elif page == "菜品管理(增删改)":
             if new_name.strip() == "":
                 st.warning("菜品名称不能为空！")
             else:
-                # 生成新ID
                 max_id = max([d["id"] for d in dishes], default=0)
                 new_id = max_id + 1
                 dishes.append({
@@ -74,7 +99,7 @@ elif page == "菜品管理(增删改)":
 
     st.divider()
 
-    # 2. 修改 / 删除 菜品
+    # 修改删除菜品
     st.subheader("✏️ 修改 / 🗑️ 删除菜品")
     if not dishes:
         st.info("暂无菜品可管理")
